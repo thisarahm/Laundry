@@ -1,45 +1,36 @@
-"use client";
-import { useRouter } from "next/navigation";
-
 export default function Home() {
-  const router = useRouter();
-
   return (
     <div
-      className="min-h-screen flex items-center justify-start p-6 md:pl-20 bg-cover bg-center relative"
+      className="min-h-screen flex items-center justify-start pl-20 bg-cover bg-center"
       style={{
         backgroundImage: "url('/images/latar.jpg')",
       }}
     >
-      {/* overlay */}
+      {/* overlay biar elegan */}
       <div className="absolute inset-0 bg-black/40"></div>
 
-      {/* CARD */}
-      <div className="relative z-10 bg-white/90 backdrop-blur-md rounded-2xl shadow-2xl p-10 max-w-xl w-full text-left">
-        
-        <h1 className="text-3xl font-bold text-gray-800 mb-4">
-          Selamat Datang di Laundry Niwasa 
+      {/* card */}
+      <div className="relative bg-gradient-to-r from-teal-500/90 to-cyan-400/90 p-10 rounded-2xl shadow-2xl text-white max-w-md w-full text-center">
+        <h1 className="text-2xl font-bold mb-4">
+          Selamat Datang di Laundry Niwasa
         </h1>
-
-        <p className="text-gray-600 mb-6">
+        <p className="mb-6 text-sm">
           Solusi laundry cepat, bersih, dan terpercaya untuk kebutuhan harianmu.
         </p>
 
-        {/* BUTTON */}
         <div className="flex gap-4">
-          <button
-            onClick={() => router.push("/login")}
-            className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition hover:scale-105 w-full"
+          <a
+            href="/login"
+            className="flex-1 bg-white text-teal-600 py-2 rounded-lg font-semibold hover:bg-gray-200 transition"
           >
             Login
-          </button>
-
-          <button
-            onClick={() => router.push("/register")}
-            className="bg-gray-200 text-gray-800 px-6 py-3 rounded-lg hover:bg-gray-300 transition hover:scale-105 w-full"
+          </a>
+          <a
+            href="/register"
+            className="flex-1 bg-white text-teal-600 py-2 rounded-lg font-semibold hover:bg-gray-200 transition"
           >
             Register
-          </button>
+          </a>
         </div>
       </div>
     </div>
