@@ -19,8 +19,13 @@ export default function Login() {
       alert(data.message);
 
       if (res.ok) {
-        window.location.href = "/layanan";
-      }
+  localStorage.setItem(
+    "user",
+    JSON.stringify(data.user)
+  );
+
+  window.location.href = "/layanan";
+}
     } catch (err) {
       alert("Gagal connect ke backend!");
     }
