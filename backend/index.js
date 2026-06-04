@@ -149,6 +149,162 @@ app.post("/api/checkout", (req, res) => {
 });
 
 // =======================
+// RIWAYAT PESANAN
+// =======================
+app.get("/api/riwayat/:user_id", (req, res) => {
+  const { user_id } = req.params;
+
+  const sql = `
+    SELECT t.id AS transaksi_id, t.total_harga, t.tanggal, t.status,
+           dt.berat, dt.subtotal,
+           s.nama_layanan,
+           r.rating, r.komentar
+    FROM transaksi t
+    JOIN detail_transaksi dt ON t.id = dt.transaksi_id
+    JOIN services s ON dt.service_id = s.id
+    LEFT JOIN ratings r ON t.id = r.transaksi_id
+    WHERE t.user_id = ?
+    ORDER BY t.tanggal DESC
+  `;
+
+  db.query(sql, [user_id], (err, result) => {
+    if (err) {
+      return res.status(500).json({ message: "Gagal mengambil riwayat" });
+    }
+
+    const grouped = {};
+    result.forEach((row) => {
+      if (!grouped[row.transaksi_id]) {
+        grouped[row.transaksi_id] = {
+          id: row.transaksi_id,
+          total_harga: row.total_harga,
+          tanggal: row.tanggal,
+          status: row.status || "Menunggu",
+          rating: row.rating || null,
+          komentar: row.komentar || null,
+          items: [],
+        };
+      }
+      grouped[row.transaksi_id].items.push({
+        nama_layanan: row.nama_layanan,
+        berat: row.berat,
+        subtotal: row.subtotal,
+      });
+    });
+
+    res.json(Object.values(grouped));
+  });
+});
+
+// =======================
+// BERI RATING
+// =======================
+app.post("/api/rating", (req, res) => {
+  const { transaksi_id, user_id, rating, komentar } = req.body;
+
+  if (!transaksi_id || !user_id || !rating) {
+    return res.status(400).json({ message: "Data tidak lengkap" });
+  }
+
+  const checkSql = "SELECT id FROM ratings WHERE transaksi_id = ? AND user_id = ?";
+  db.query(checkSql, [transaksi_id, user_id], (err, result) => {
+    if (err) return res.status(500).json({ message: "Error database" });
+
+    if (result.length > 0) {
+      return res.status(400).json({ message: "Pesanan ini sudah diberi rating" });
+    }
+
+    const sql = "INSERT INTO ratings (transaksi_id, user_id, rating, komentar) VALUES (?, ?, ?, ?)";
+    db.query(sql, [transaksi_id, user_id, rating, komentar || null], (err) => {
+      if (err) return res.status(500).json({ message: "Gagal menyimpan rating" });
+      res.json({ message: "Rating berhasil disimpan" });
+    });
+  });
+});
+
+// =======================
+// ADMIN - STATISTIK
+// =======================
+app.get("/api/admin/stats", (req, res) => {
+  const sqlPesananHariIni = "SELECT COUNT(*) AS total FROM transaksi WHERE DATE(tanggal) = CURDATE()";
+  const sqlPendapatan = "SELECT COALESCE(SUM(total_harga), 0) AS total FROM transaksi";
+  const sqlUsers = "SELECT COUNT(*) AS total FROM users WHERE role = 'user'";
+
+  db.query(sqlPesananHariIni, (err, r1) => {
+    if (err) return res.status(500).json({ message: "Error" });
+    db.query(sqlPendapatan, (err, r2) => {
+      if (err) return res.status(500).json({ message: "Error" });
+      db.query(sqlUsers, (err, r3) => {
+        if (err) return res.status(500).json({ message: "Error" });
+        res.json({
+          pesanan_hari_ini: r1[0].total,
+          total_pendapatan: r2[0].total,
+          total_users: r3[0].total,
+        });
+      });
+    });
+  });
+});
+
+// =======================
+// ADMIN - SEMUA PESANAN
+// =======================
+app.get("/api/admin/pesanan", (req, res) => {
+  const sql = `
+    SELECT t.id, t.total_harga, t.tanggal, t.status,
+           u.username,
+           GROUP_CONCAT(s.nama_layanan ORDER BY s.id SEPARATOR ', ') AS layanan
+    FROM transaksi t
+    JOIN users u ON t.user_id = u.id
+    JOIN detail_transaksi dt ON t.id = dt.transaksi_id
+    JOIN services s ON dt.service_id = s.id
+    GROUP BY t.id
+    ORDER BY t.tanggal DESC
+  `;
+  db.query(sql, (err, result) => {
+    if (err) return res.status(500).json({ message: "Gagal mengambil pesanan" });
+    res.json(result);
+  });
+});
+
+// =======================
+// ADMIN - UPDATE STATUS
+// =======================
+app.put("/api/admin/pesanan/:id/status", (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+
+  const valid = ["Menunggu", "Diproses", "Siap Diambil", "Selesai"];
+  if (!valid.includes(status)) {
+    return res.status(400).json({ message: "Status tidak valid" });
+  }
+
+  db.query("UPDATE transaksi SET status = ? WHERE id = ?", [status, id], (err) => {
+    if (err) return res.status(500).json({ message: "Gagal update status" });
+    res.json({ message: "Status diperbarui" });
+  });
+});
+
+// =======================
+// ADMIN - SEMUA RATING
+// =======================
+app.get("/api/admin/ratings", (req, res) => {
+  const sql = `
+    SELECT r.id, r.rating, r.komentar, r.tanggal,
+           u.username,
+           t.id AS transaksi_id, t.total_harga
+    FROM ratings r
+    JOIN users u ON r.user_id = u.id
+    JOIN transaksi t ON r.transaksi_id = t.id
+    ORDER BY r.tanggal DESC
+  `;
+  db.query(sql, (err, result) => {
+    if (err) return res.status(500).json({ message: "Gagal mengambil rating" });
+    res.json(result);
+  });
+});
+
+// =======================
 // SERVER
 // =======================
 app.listen(5000, () => {
