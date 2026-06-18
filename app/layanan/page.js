@@ -64,6 +64,7 @@ export default function Layanan() {
   const [search, setSearch] = useState("");
   const [checkoutMsg, setCheckoutMsg] = useState("");
   const [checkoutOk, setCheckoutOk] = useState(false);
+  const [lastTransaksiId, setLastTransaksiId] = useState(null);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [cartToast, setCartToast] = useState({ show: false, name: "" });
   const [openFaq, setOpenFaq] = useState(null);
@@ -133,6 +134,8 @@ export default function Layanan() {
       if (res.ok) {
         setCheckoutOk(true);
         setShowReceipt(true);
+        setLastTransaksiId(result.transaksi_id || null);
+        setCart([]);
       }
     } catch {
       setCheckoutMsg("Gagal checkout, coba lagi");
@@ -618,6 +621,14 @@ export default function Layanan() {
             >
               Cetak / Download PDF
             </button>
+            {lastTransaksiId && (
+              <button
+                onClick={() => (window.location.href = "/riwayat")}
+                className="mt-3 w-full bg-white border border-teal-600 text-teal-600 py-3.5 rounded-xl font-semibold transition"
+              >
+                Lihat Riwayat Pesanan
+              </button>
+            )}
           </div>
         </div>
       )}

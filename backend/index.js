@@ -1,11 +1,25 @@
 const mysql = require("mysql2");
 const express = require("express");
 const cors = require("cors");
+const http = require("http");
+const WebSocket = require("ws");
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
+
+// websocket server (assigned later)
+let wss;
+
+function broadcast(event) {
+  if (!wss) return;
+  wss.clients.forEach((client) => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(JSON.stringify(event));
+    }
+  });
+}
 
 // KONEKSI DATABASE
 const db = mysql.createConnection({
@@ -120,6 +134,8 @@ app.post("/api/checkout", (req, res) => {
 
       const transaksiId = transaksiResult.insertId;
 
+      console.log("[checkout] created transaksi id:", transaksiId, "user_id:", user_id, "total_harga:", total_harga);
+
       const values = cart.map((item) => [
         transaksiId,
         item.service_id,
@@ -130,14 +146,20 @@ app.post("/api/checkout", (req, res) => {
       const detailSql =
         "INSERT INTO detail_transaksi (transaksi_id, service_id, berat, subtotal) VALUES ?";
 
+      console.log("[checkout] detail values:", values);
+
       db.query(detailSql, [values], (err) => {
         if (err) {
-          console.log(err);
+          console.log("[checkout] failed insert details:", err);
 
           return res.status(500).json({
             message: "Gagal simpan detail transaksi",
           });
         }
+
+        console.log("[checkout] inserted detail_transaksi for transaksi id:", transaksiId);
+        // broadcast new transaksi to connected websocket clients
+        broadcast({ type: "new-transaksi", payload: { transaksi_id: transaksiId, user_id, total_harga } });
 
         res.json({
           message: "Checkout berhasil",
@@ -217,6 +239,8 @@ app.post("/api/rating", (req, res) => {
     const sql = "INSERT INTO ratings (transaksi_id, user_id, rating, komentar) VALUES (?, ?, ?, ?)";
     db.query(sql, [transaksi_id, user_id, rating, komentar || null], (err) => {
       if (err) return res.status(500).json({ message: "Gagal menyimpan rating" });
+      // broadcast rating event
+      broadcast({ type: "rating", payload: { transaksi_id, user_id, rating, komentar } });
       res.json({ message: "Rating berhasil disimpan" });
     });
   });
@@ -281,7 +305,14 @@ app.put("/api/admin/pesanan/:id/status", (req, res) => {
 
   db.query("UPDATE transaksi SET status = ? WHERE id = ?", [status, id], (err) => {
     if (err) return res.status(500).json({ message: "Gagal update status" });
-    res.json({ message: "Status diperbarui" });
+    // fetch user_id for this transaksi so we can notify the right user
+    db.query("SELECT user_id FROM transaksi WHERE id = ?", [id], (err2, rows) => {
+      if (!err2 && rows && rows.length > 0) {
+        const user_id = rows[0].user_id;
+        broadcast({ type: "status-update", payload: { transaksi_id: id, user_id, status } });
+      }
+      res.json({ message: "Status diperbarui" });
+    });
   });
 });
 
@@ -307,6 +338,16 @@ app.get("/api/admin/ratings", (req, res) => {
 // =======================
 // SERVER
 // =======================
-app.listen(5000, () => {
-  console.log("Backend jalan di port 5000");
+const server = http.createServer(app);
+
+wss = new WebSocket.Server({ server });
+
+wss.on("connection", (ws) => {
+  console.log("[ws] client connected");
+  ws.send(JSON.stringify({ type: "welcome", payload: { message: "connected" } }));
+  ws.on("close", () => console.log("[ws] client disconnected"));
+});
+
+server.listen(5000, () => {
+  console.log("Backend jalan di port 5000 (with WebSocket)");
 });

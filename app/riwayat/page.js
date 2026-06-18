@@ -19,24 +19,66 @@ export default function Riwayat() {
   const [komentar, setKomentar] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState("");
-
-  const user =
-    typeof window !== "undefined"
-      ? JSON.parse(localStorage.getItem("user"))
-      : null;
+  const [user, setUser] = useState(null);
 
   useEffect(() => {
-    if (!user) {
+    // Read user from localStorage only on the client inside effect
+    if (typeof window === "undefined") return;
+    const u = JSON.parse(localStorage.getItem("user"));
+    if (!u) {
       window.location.href = "/login";
       return;
     }
-    fetch(`http://localhost:5000/api/riwayat/${user.id}`)
-      .then((res) => res.json())
-      .then((data) => {
-        setOrders(data);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
+    setUser(u);
+
+    let socket;
+
+    const fetchRiwayat = () => {
+      fetch(`http://localhost:5000/api/riwayat/${u.id}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (Array.isArray(data)) {
+            setOrders(data);
+          } else {
+            console.warn("Unexpected /api/riwayat response:", data);
+            setOrders([]);
+          }
+          setLoading(false);
+        })
+        .catch((err) => {
+          console.error("Failed to fetch riwayat:", err);
+          setOrders([]);
+          setLoading(false);
+        });
+    };
+
+    // initial fetch
+    fetchRiwayat();
+
+    // connect to backend WebSocket for real-time updates
+    try {
+      socket = new WebSocket("ws://localhost:5000");
+      socket.addEventListener("open", () => console.log("[ws] connected to backend"));
+      socket.addEventListener("message", (ev) => {
+        try {
+          const msg = JSON.parse(ev.data);
+          if (!msg || !msg.type) return;
+          if (msg.type === "new-transaksi" && msg.payload?.user_id === u.id) {
+            fetchRiwayat();
+          } else if ((msg.type === "status-update" || msg.type === "rating") && msg.payload?.user_id === u.id) {
+            fetchRiwayat();
+          }
+        } catch (e) {
+          console.error("Failed parse ws message", e);
+        }
+      });
+    } catch (e) {
+      console.warn("WebSocket connection failed", e);
+    }
+
+    return () => {
+      if (socket && socket.readyState === WebSocket.OPEN) socket.close();
+    };
   }, []);
 
   const handleLogout = () => {
@@ -195,7 +237,7 @@ export default function Riwayat() {
 
           {loading ? (
             <div className="text-center py-20 text-gray-400 text-sm">Memuat riwayat...</div>
-          ) : orders.length === 0 ? (
+          ) : !Array.isArray(orders) || orders.length === 0 ? (
             <div className="text-center py-20">
               <p className="text-5xl mb-4">📋</p>
               <p className="text-gray-600 font-medium">Belum ada pesanan</p>
